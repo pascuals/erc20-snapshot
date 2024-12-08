@@ -4,7 +4,17 @@ const Config = require("./config").getConfig();
 const FileHelper = require("./file-helper");
 const Parameters = require("./parameters").get();
 
-const web3 = new Web3(new Web3.providers.HttpProvider((Config || {}).provider || "http://localhost:8545"));
+const web3 = [];
+let web3Index = 0;
+const getWeb3 = () => {
+  if (web3Index >= web3.length) web3Index = 0;
+  return web3[web3Index++];
+};
+
+
+(Config || {}).providers.forEach(config =>
+  web3.push(new Web3(new Web3.providers.HttpProvider(config || "http://localhost:8545")))
+);
 
 const findTypeFromCache = (cache, wallet) => {
   if (cache && cache.length) {
@@ -19,10 +29,6 @@ const findTypeFromCache = (cache, wallet) => {
 };
 
 module.exports.addType = async balances => {
-  if (Config.checkIfContract.toLowerCase() !== "yes") {
-    return balances;
-  }
-
   let counter = 0;
   let cache = await FileHelper.parseFile(Parameters.knownTypes);
 
@@ -34,9 +40,9 @@ module.exports.addType = async balances => {
     if (!type) {
       type = "wallet";
 
-      const code = await web3.eth.getCode(balance.wallet);
+      const code = await getWeb3().eth.getCode(balance.wallet);
 
-      if (code != "0x") {
+      if (code !== "0x") {
         type = "contract";
         console.log("✓", balance.wallet, "is a contract.");
       }

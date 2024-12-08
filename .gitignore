@@ -91,5 +91,7 @@ how.js
 snapshot.config.json
 tx
 balances
-.cache
 .vscode
+
+.idea
+erc20-snapshot.iml

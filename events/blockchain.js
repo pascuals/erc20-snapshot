@@ -5,7 +5,7 @@ const Web3 = require("web3");
 const BlockByBlock = require("./block-by-block");
 const BlockReader = require("./block-reader");
 const Config = require("../config").getConfig();
-const Contract = require("../contract").getContract();
+const { getContract } = require("../contract");
 const FileHelper = require("../file-helper");
 const LastDownloadedBlock = require("./last-downloaded-block");
 const Parameters = require("../parameters").get();
@@ -14,11 +14,21 @@ const { promisify } = require("util");
 
 const sleep = promisify(setTimeout);
 
-const web3 = new Web3(new Web3.providers.HttpProvider((Config || {}).provider || "http://localhost:8545"));
+const web3 = [];
+let web3Index = 0;
+const getWeb3 = () => {
+  if (web3Index >= web3.length) web3Index = 0;
+  return web3[web3Index++];
+};
+
+
+(Config || {}).providers.forEach(config =>
+  web3.push(new Web3(new Web3.providers.HttpProvider(config || "http://localhost:8545")))
+);
 
 const groupBy = (objectArray, property) => {
   return objectArray.reduce((acc, obj) => {
-    var key = obj[property];
+    const key = obj[property];
     if (!acc[key]) {
       acc[key] = [];
     }
@@ -29,7 +39,8 @@ const groupBy = (objectArray, property) => {
 
 const tryGetEvents = async (start, end, symbol) => {
   try {
-    const pastEvents = await Contract.getPastEvents("Transfer", { fromBlock: start, toBlock: end });
+    console.log(`Fetching ${end - start} blocks (${start} to ${end})`);
+    const pastEvents = await getContract().getPastEvents("Transfer", { fromBlock: start, toBlock: end });
 
     if (pastEvents.length) {
       console.info("Successfully imported ", pastEvents.length, " events");
@@ -48,20 +59,20 @@ const tryGetEvents = async (start, end, symbol) => {
       }
     }
   } catch (e) {
-    console.log("Could not get events due to an error. Now checking block by block.");
-    await BlockByBlock.tryBlockByBlock(Contract, start, end, symbol);
+    console.log("Could not get events due to an error. Now checking block by block.", "");
+    await BlockByBlock.tryBlockByBlock(start, end, symbol);
   }
 };
 
 module.exports.get = async () => {
-  const name = await Contract.methods.name().call();
-  const symbol = await Contract.methods.symbol().call();
-  const decimals = await Contract.methods.decimals().call();
-  const blockHeight = await web3.eth.getBlockNumber();
-  var fromBlock = parseInt(Config.fromBlock) || 0;
+  const name = await getContract().methods.name().call();
+  const symbol = await getContract().methods.symbol().call();
+  const decimals = await getContract().methods.decimals().call();
+  const blockHeight = await getWeb3().eth.getBlockNumber();
+  let fromBlock = parseInt(Config.fromBlock) || 0;
   const blocksPerBatch = parseInt(Config.blocksPerBatch) || 0;
   const delay = parseInt(Config.delay) || 0;
-  const toBlock = blockHeight;
+  const toBlock = parseInt(Config.toBlock) || blockHeight;
 
   const lastDownloadedBlock = await LastDownloadedBlock.get(symbol);
 
@@ -70,39 +81,33 @@ module.exports.get = async () => {
     fromBlock = lastDownloadedBlock + 1;
   }
 
-  console.log("From %d to %d", fromBlock, toBlock);
+  console.log("From %d to %d", fromBlock, toBlock, Math.ceil((toBlock - fromBlock) / blocksPerBatch));
 
   let start = fromBlock;
-  let end = fromBlock + blocksPerBatch;
+  let end = Math.min(fromBlock + blocksPerBatch, toBlock);
   let i = 0;
 
-  while (end < toBlock) {
+  while (start <= toBlock) {
     i++;
 
     if (delay) {
       await sleep(delay);
     }
 
-    console.log("Batch", i + 1, " From", start, "to", end);
+    console.log("Batch", i, " From", start, "to", end);
 
-    await tryGetEvents(start, end, symbol);
+    await tryGetEvents(start, Math.min(end, toBlock), symbol);
 
     start = end + 1;
-    end = start + blocksPerBatch;
-
-    if (end > toBlock) {
-      end = toBlock;
-    }
+    end = Math.min(start + blocksPerBatch, toBlock);
   }
 
   const events = await BlockReader.getEvents(symbol);
 
-  const data = {
+  return {
     name,
     symbol,
     decimals,
-    events: events
+    events
   };
-
-  return data;
 };
