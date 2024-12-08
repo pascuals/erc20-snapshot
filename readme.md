@@ -34,14 +34,20 @@ erc20-snapshot
 
 ```json
 {
-  "provider": "https://mainnet.infura.io/v3/<key>",
-  "contractAddress": "",
-  "fromBlock": 0,
+  "providers": [
+    "https://mainnet.infura.io/v3/<infura_api_key>",
+    "https://mainnet.gateway.tenderly.co",
+    "https://rpc.flashbots.net",
+    "https://rpc.mevblocker.io"
+  ],
+  "contractAddress": "<erc20_contract_address>",
+  "fromBlock": 12345678,
   "toBlock": "latest",
   "format": "json",
-  "blocksPerBatch": 2500,
+  "blocksPerBatch": 50000,
   "delay": 0,
-  "checkIfContract": "yes"
+  "checkIfContract": "yes",
+  "ignoreZeroBalances": "yes"
 }
 ```
 
